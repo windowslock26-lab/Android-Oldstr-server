@@ -83,7 +83,7 @@
 
         .app-header {
             display: flex;
-            align-items: center;
+            align-items: flex-start;
             margin-bottom: 12px;
         }
 
@@ -95,9 +95,23 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 32px;
+            font-size: 0px;
             flex-shrink: 0;
             margin-right: 12px;
+            background-size: cover;
+            background-position: center;
+            overflow: hidden;
+        }
+
+        .app-icon img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .app-icon.fallback {
+            font-size: 32px;
+            display: flex;
         }
 
         .app-info {
@@ -108,6 +122,13 @@
             font-size: 1.1em;
             font-weight: bold;
             color: #333;
+            margin-bottom: 3px;
+            word-wrap: break-word;
+        }
+
+        .app-package {
+            color: #999;
+            font-size: 0.75em;
             margin-bottom: 3px;
             word-wrap: break-word;
         }
@@ -228,7 +249,6 @@
             .app-icon {
                 width: 50px;
                 height: 50px;
-                font-size: 28px;
             }
         }
     </style>
@@ -250,17 +270,10 @@
         </div>
     </div>
 
-    <script>
-        // ===== CONFIGURATION =====
-        // Edit this section to add or rename your APKs
-        var APP_CONFIG = {
-            'GameName.apk': { name: 'Game Name', icon: '🎮' },
-            'UtilityApp.apk': { name: 'Utility App', icon: '⚙️' },
-            'ChatApp.apk': { name: 'Chat App', icon: '💬' },
-            'MusicPlayer.apk': { name: 'Music Player', icon: '🎵' }
-        };
-        // ===== END CONFIGURATION =====
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://unpkg.com/axml@latest/dist/axml.min.js"></script>
 
+    <script>
         var REPO_OWNER = 'windowslock26-lab';
         var REPO_NAME = 'Android-Oldstr-server';
         var API_URL = 'https://api.github.com/repos/' + REPO_OWNER + '/' + REPO_NAME + '/releases';
@@ -269,7 +282,7 @@
         function fetchReleases() {
             var xhr = new XMLHttpRequest();
             xhr.open('GET', API_URL, true);
-            xhr.timeout = 8000;
+            xhr.timeout = 10000;
             
             xhr.onload = function() {
                 if (xhr.status >= 200 && xhr.status < 300) {
@@ -316,39 +329,155 @@
                 return;
             }
 
+            content.innerHTML = '<div class="loading">Processing APK files...</div>';
+
             var appsHTML = '';
+            var processed = 0;
+
             for (var i = 0; i < apkAssets.length; i++) {
-                var asset = apkAssets[i];
-                var filename = asset.name;
-                var config = APP_CONFIG[filename] || { name: filename, icon: '📦' };
-                var appName = config.name;
-                var icon = config.icon;
-                var downloadId = 'download-' + i;
-                var sizeInMB = (asset.size / (1024 * 1024)).toFixed(2);
-                var downloadLink = asset.browser_download_url;
+                (function(index, asset) {
+                    extractAPKInfo(asset, function(info) {
+                        processed++;
+                        var downloadId = 'download-' + index;
+                        var sizeInMB = (asset.size / (1024 * 1024)).toFixed(2);
+                        var downloadLink = asset.browser_download_url;
 
-                appsHTML += '<div class="app-card">' +
-                    '<div class="app-header">' +
-                    '<div class="app-icon">' + icon + '</div>' +
-                    '<div class="app-info">' +
-                    '<div class="app-name">' + escapeHtml(appName) + '</div>' +
-                    '<div class="app-version">' + sizeInMB + ' MB</div>' +
-                    '</div>' +
-                    '</div>' +
-                    '<div class="download-section">' +
-                    '<div class="status-message" id="status-' + downloadId + '"></div>' +
-                    '<div class="progress-container" id="progress-container-' + downloadId + '">' +
-                    '<div class="progress-bar">' +
-                    '<div class="progress-fill" id="progress-fill-' + downloadId + '"></div>' +
-                    '</div>' +
-                    '<div class="progress-text" id="progress-text-' + downloadId + '">0%</div>' +
-                    '</div>' +
-                    '<button class="download-btn" id="btn-' + downloadId + '" onclick="startDownload(\'' + downloadLink + '\', \'' + downloadId + '\', \'' + filename + '\')">Download</button>' +
-                    '</div>' +
-                    '</div>';
+                        var iconHTML = '';
+                        if (info.icon) {
+                            iconHTML = '<img src="' + info.icon + '" alt="icon">';
+                        } else {
+                            iconHTML = '<div class="fallback">📦</div>';
+                        }
+
+                        appsHTML += '<div class="app-card">' +
+                            '<div class="app-header">' +
+                            '<div class="app-icon">' + iconHTML + '</div>' +
+                            '<div class="app-info">' +
+                            '<div class="app-name">' + escapeHtml(info.name || 'Unknown App') + '</div>' +
+                            '<div class="app-package">' + escapeHtml(info.packageName || 'com.unknown') + '</div>' +
+                            '<div class="app-version">v' + escapeHtml(info.version || '1.0') + ' • ' + sizeInMB + ' MB</div>' +
+                            '</div>' +
+                            '</div>' +
+                            '<div class="download-section">' +
+                            '<div class="status-message" id="status-' + downloadId + '"></div>' +
+                            '<div class="progress-container" id="progress-container-' + downloadId + '">' +
+                            '<div class="progress-bar">' +
+                            '<div class="progress-fill" id="progress-fill-' + downloadId + '"></div>' +
+                            '</div>' +
+                            '<div class="progress-text" id="progress-text-' + downloadId + '">0%</div>' +
+                            '</div>' +
+                            '<button class="download-btn" id="btn-' + downloadId + '" onclick="startDownload(\'' + downloadLink + '\', \'' + downloadId + '\', \'' + asset.name + '\')">Download</button>' +
+                            '</div>' +
+                            '</div>';
+
+                        if (processed === apkAssets.length) {
+                            content.innerHTML = '<div class="apps-list">' + appsHTML + '</div>';
+                        }
+                    });
+                })(i, apkAssets[i]);
             }
+        }
 
-            content.innerHTML = '<div class="apps-list">' + appsHTML + '</div>';
+        function extractAPKInfo(asset, callback) {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', asset.browser_download_url, true);
+            xhr.responseType = 'arraybuffer';
+            xhr.timeout = 30000;
+
+            xhr.onload = function() {
+                if (xhr.status === 200) {
+                    try {
+                        JSZip.loadAsync(xhr.response).then(function(zip) {
+                            var manifest = zip.file('AndroidManifest.xml');
+                            if (!manifest) {
+                                callback({ name: asset.name, packageName: '', version: '', icon: null });
+                                return;
+                            }
+
+                            manifest.async('arraybuffer').then(function(data) {
+                                try {
+                                    var parser = new window.AXMLParser(new Uint8Array(data));
+                                    var manifest_obj = parser.parse();
+                                    
+                                    var appName = manifest_obj.application.label || asset.name;
+                                    var packageName = manifest_obj.manifest.package || '';
+                                    var version = manifest_obj.manifest.versionName || '1.0';
+                                    
+                                    extractIcon(zip, manifest_obj, function(iconData) {
+                                        callback({
+                                            name: appName,
+                                            packageName: packageName,
+                                            version: version,
+                                            icon: iconData
+                                        });
+                                    });
+                                } catch(e) {
+                                    callback({ name: asset.name, packageName: '', version: '', icon: null });
+                                }
+                            });
+                        });
+                    } catch(e) {
+                        callback({ name: asset.name, packageName: '', version: '', icon: null });
+                    }
+                } else {
+                    callback({ name: asset.name, packageName: '', version: '', icon: null });
+                }
+            };
+
+            xhr.onerror = function() {
+                callback({ name: asset.name, packageName: '', version: '', icon: null });
+            };
+
+            xhr.ontimeout = function() {
+                callback({ name: asset.name, packageName: '', version: '', icon: null });
+            };
+
+            xhr.send();
+        }
+
+        function extractIcon(zip, manifest, callback) {
+            try {
+                var iconPath = null;
+                var possiblePaths = [
+                    'res/mipmap-xxxhdpi/ic_launcher.png',
+                    'res/mipmap-xxhdpi/ic_launcher.png',
+                    'res/mipmap-xhdpi/ic_launcher.png',
+                    'res/mipmap-hdpi/ic_launcher.png',
+                    'res/mipmap-mdpi/ic_launcher.png',
+                    'res/drawable-xxxhdpi/ic_launcher.png',
+                    'res/drawable-xxhdpi/ic_launcher.png',
+                    'res/drawable-xhdpi/ic_launcher.png',
+                    'res/drawable-hdpi/ic_launcher.png',
+                    'res/drawable-mdpi/ic_launcher.png',
+                    'res/drawable/ic_launcher.png'
+                ];
+
+                var checkPath = function(index) {
+                    if (index >= possiblePaths.length) {
+                        callback(null);
+                        return;
+                    }
+
+                    var path = possiblePaths[index];
+                    var file = zip.file(path);
+                    
+                    if (file) {
+                        file.async('blob').then(function(blob) {
+                            var reader = new FileReader();
+                            reader.onload = function(e) {
+                                callback(e.target.result);
+                            };
+                            reader.readAsDataURL(blob);
+                        });
+                    } else {
+                        checkPath(index + 1);
+                    }
+                };
+
+                checkPath(0);
+            } catch(e) {
+                callback(null);
+            }
         }
 
         function startDownload(url, downloadId, filename) {
