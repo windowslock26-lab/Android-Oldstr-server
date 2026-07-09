@@ -1,12 +1,12 @@
 {
   "apps": [
     {
-      "name": "Example App",
-      "package": "com.example.app",
-      "version": "1.0",
-      "size": "15.5",
-      "filename": "ExampleApp.apk",
-      "downloadUrl": "https://github.com/windowslock26-lab/Android-Oldstr-server/releases/download/v1.0/ExampleApp.apk",
+      "name": "Angrybirds",
+      "package": "com.rovio.angrybirds.app",
+      "version": "8.0.3",
+      "size": "98.9",
+      "filename": "Angrybirds803.apk",
+      "downloadUrl": "https://github.com/windowslock26-lab/Android-Oldstr-server/releases/download/APKS/com.rovio.angrybirds_8.0.3-8031_minAPI16.armeabi-v7a.x86.nodpi._apkmirror.com.apk",
       "icon": ""
     }
   ]
