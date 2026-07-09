@@ -81,6 +81,12 @@
             box-shadow: 0 2px 8px rgba(0,0,0,0.2);
         }
 
+        .app-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
         .app-icon {
             width: 60px;
             height: 60px;
@@ -89,68 +95,30 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            margin-bottom: 10px;
             font-size: 32px;
             flex-shrink: 0;
+            margin-right: 12px;
         }
 
         .app-info {
-            margin-bottom: 10px;
+            flex-grow: 1;
         }
 
         .app-name {
-            font-size: 1.2em;
+            font-size: 1.1em;
             font-weight: bold;
             color: #333;
-            margin-bottom: 5px;
+            margin-bottom: 3px;
             word-wrap: break-word;
         }
 
         .app-version {
             color: #666;
-            font-size: 0.9em;
-            margin-bottom: 3px;
-        }
-
-        .app-date {
-            color: #999;
-            font-size: 0.85em;
-            margin-bottom: 10px;
-        }
-
-        .app-files {
-            margin-bottom: 10px;
-            background: #f9f9f9;
-            padding: 10px;
-            border-radius: 4px;
-            border-left: 4px solid #667eea;
-        }
-
-        .file-item {
-            padding: 8px 0;
-            font-size: 0.9em;
-            color: #555;
-            border-bottom: 1px solid #eee;
-            word-wrap: break-word;
-        }
-
-        .file-item:last-child {
-            border-bottom: none;
-        }
-
-        .file-name {
-            font-weight: bold;
-            display: block;
-            margin-bottom: 3px;
-        }
-
-        .file-size {
-            color: #999;
             font-size: 0.85em;
         }
 
         .download-section {
-            margin-top: 15px;
+            margin-top: 12px;
         }
 
         .progress-container {
@@ -160,31 +128,31 @@
 
         .progress-bar {
             width: 100%;
-            height: 20px;
+            height: 18px;
             background: #e0e0e0;
             border-radius: 4px;
             overflow: hidden;
-            margin-bottom: 5px;
+            margin-bottom: 4px;
         }
 
         .progress-fill {
             height: 100%;
             background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
             width: 0%;
-            transition: width 0.3s ease;
+            transition: width 0.2s ease;
         }
 
         .progress-text {
-            font-size: 0.85em;
+            font-size: 0.8em;
             color: #666;
             text-align: center;
         }
 
         .status-message {
-            font-size: 0.9em;
+            font-size: 0.85em;
             color: #28a745;
             text-align: center;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
             display: none;
         }
 
@@ -192,19 +160,15 @@
             color: #d9534f;
         }
 
-        .status-message.warning-msg {
-            color: #f0ad4e;
-        }
-
         .download-btn {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border: none;
-            padding: 12px 16px;
+            padding: 10px 14px;
             border-radius: 4px;
             cursor: pointer;
             font-weight: bold;
-            font-size: 1em;
+            font-size: 0.95em;
             text-decoration: none;
             display: block;
             text-align: center;
@@ -242,13 +206,13 @@
             text-align: center;
             color: rgba(255,255,255,0.7);
             padding: 15px 10px;
-            font-size: 0.85em;
+            font-size: 0.8em;
             border-top: 1px solid rgba(255,255,255,0.2);
         }
 
         .footer-text {
             word-wrap: break-word;
-            margin: 5px 0;
+            margin: 4px 0;
         }
 
         @media screen and (max-width: 480px) {
@@ -256,13 +220,15 @@
                 font-size: 1.5em;
             }
 
-            .header p {
-                font-size: 0.95em;
-            }
-
             .app-card {
                 padding: 12px;
                 margin-bottom: 12px;
+            }
+
+            .app-icon {
+                width: 50px;
+                height: 50px;
+                font-size: 28px;
             }
         }
     </style>
@@ -285,6 +251,16 @@
     </div>
 
     <script>
+        // ===== CONFIGURATION =====
+        // Edit this section to add or rename your APKs
+        var APP_CONFIG = {
+            'GameName.apk': { name: 'Game Name', icon: '🎮' },
+            'UtilityApp.apk': { name: 'Utility App', icon: '⚙️' },
+            'ChatApp.apk': { name: 'Chat App', icon: '💬' },
+            'MusicPlayer.apk': { name: 'Music Player', icon: '🎵' }
+        };
+        // ===== END CONFIGURATION =====
+
         var REPO_OWNER = 'windowslock26-lab';
         var REPO_NAME = 'Android-Oldstr-server';
         var API_URL = 'https://api.github.com/repos/' + REPO_OWNER + '/' + REPO_NAME + '/releases';
@@ -293,16 +269,20 @@
         function fetchReleases() {
             var xhr = new XMLHttpRequest();
             xhr.open('GET', API_URL, true);
-            xhr.timeout = 10000;
+            xhr.timeout = 8000;
             
             xhr.onload = function() {
                 if (xhr.status >= 200 && xhr.status < 300) {
                     try {
                         var releases = JSON.parse(xhr.responseText);
-                        displayReleases(releases);
-                        updateLastModified();
+                        if (releases.length > 0) {
+                            displayApps(releases[0]);
+                            updateLastModified();
+                        } else {
+                            showError('No releases found. Create a release and add APK files.');
+                        }
                     } catch(e) {
-                        showError('Error parsing data: ' + e.message);
+                        showError('Error parsing data');
                     }
                 } else {
                     showError('Failed to load: HTTP ' + xhr.status);
@@ -314,74 +294,47 @@
             };
 
             xhr.ontimeout = function() {
-                showError('Request timeout. Please try again.');
+                showError('Request timeout. Try again.');
             };
 
             xhr.send();
         }
 
-        function displayReleases(releases) {
+        function displayApps(release) {
             var content = document.getElementById('content');
-            var appsWithAssets = [];
+            var apkAssets = [];
 
-            for (var i = 0; i < releases.length; i++) {
-                var release = releases[i];
-                if (release.assets && release.assets.length > 0) {
-                    var hasApk = false;
-                    for (var j = 0; j < release.assets.length; j++) {
-                        if (release.assets[j].name.toLowerCase().indexOf('.apk') !== -1) {
-                            hasApk = true;
-                            break;
-                        }
-                    }
-                    if (hasApk) {
-                        appsWithAssets.push(release);
-                    }
+            for (var i = 0; i < release.assets.length; i++) {
+                var asset = release.assets[i];
+                if (asset.name.toLowerCase().indexOf('.apk') !== -1) {
+                    apkAssets.push(asset);
                 }
             }
 
-            if (appsWithAssets.length === 0) {
-                content.innerHTML = '<div class="no-apps">No APK files found in releases.<br>Upload APKs to GitHub releases to display them here.</div>';
+            if (apkAssets.length === 0) {
+                content.innerHTML = '<div class="no-apps">No APK files in this release.<br>Add APK files to the latest release.</div>';
                 return;
             }
 
             var appsHTML = '';
-            for (var i = 0; i < appsWithAssets.length; i++) {
-                var release = appsWithAssets[i];
-                var apkAssets = [];
-                
-                for (var j = 0; j < release.assets.length; j++) {
-                    if (release.assets[j].name.toLowerCase().indexOf('.apk') !== -1) {
-                        apkAssets.push(release.assets[j]);
-                    }
-                }
-
-                var appName = release.name || release.tag_name;
-                var version = release.tag_name;
-                var releaseDate = new Date(release.published_at).toLocaleDateString();
+            for (var i = 0; i < apkAssets.length; i++) {
+                var asset = apkAssets[i];
+                var filename = asset.name;
+                var config = APP_CONFIG[filename] || { name: filename, icon: '📦' };
+                var appName = config.name;
+                var icon = config.icon;
                 var downloadId = 'download-' + i;
-
-                var filesHTML = '';
-                for (var j = 0; j < apkAssets.length; j++) {
-                    var asset = apkAssets[j];
-                    var sizeInMB = (asset.size / (1024 * 1024)).toFixed(2);
-                    filesHTML += '<div class="file-item">' +
-                        '<span class="file-name">' + escapeHtml(asset.name) + '</span>' +
-                        '<span class="file-size">' + sizeInMB + ' MB</span>' +
-                        '</div>';
-                }
-
-                var downloadLink = apkAssets[0].browser_download_url;
-                var fileSize = apkAssets[0].size;
+                var sizeInMB = (asset.size / (1024 * 1024)).toFixed(2);
+                var downloadLink = asset.browser_download_url;
 
                 appsHTML += '<div class="app-card">' +
-                    '<div class="app-icon">📦</div>' +
+                    '<div class="app-header">' +
+                    '<div class="app-icon">' + icon + '</div>' +
                     '<div class="app-info">' +
                     '<div class="app-name">' + escapeHtml(appName) + '</div>' +
-                    '<div class="app-version">Version: ' + escapeHtml(version) + '</div>' +
-                    '<div class="app-date">Released: ' + releaseDate + '</div>' +
+                    '<div class="app-version">' + sizeInMB + ' MB</div>' +
                     '</div>' +
-                    '<div class="app-files">' + filesHTML + '</div>' +
+                    '</div>' +
                     '<div class="download-section">' +
                     '<div class="status-message" id="status-' + downloadId + '"></div>' +
                     '<div class="progress-container" id="progress-container-' + downloadId + '">' +
@@ -390,7 +343,7 @@
                     '</div>' +
                     '<div class="progress-text" id="progress-text-' + downloadId + '">0%</div>' +
                     '</div>' +
-                    '<button class="download-btn" id="btn-' + downloadId + '" onclick="startDownload(\'' + downloadLink + '\', \'' + downloadId + '\', ' + fileSize + ')">Download APK</button>' +
+                    '<button class="download-btn" id="btn-' + downloadId + '" onclick="startDownload(\'' + downloadLink + '\', \'' + downloadId + '\', \'' + filename + '\')">Download</button>' +
                     '</div>' +
                     '</div>';
             }
@@ -398,19 +351,18 @@
             content.innerHTML = '<div class="apps-list">' + appsHTML + '</div>';
         }
 
-        function startDownload(url, downloadId, fileSize) {
+        function startDownload(url, downloadId, filename) {
             var button = document.getElementById('btn-' + downloadId);
             var progressContainer = document.getElementById('progress-container-' + downloadId);
             var statusMessage = document.getElementById('status-' + downloadId);
 
             if (button.classList.contains('completed')) {
-                // If already downloaded, trigger re-download
-                triggerDownload(url);
+                triggerDownload(url, filename);
                 return;
             }
 
             if (downloadStates[downloadId]) {
-                return; // Already downloading
+                return;
             }
 
             downloadStates[downloadId] = true;
@@ -426,27 +378,26 @@
 
             xhr.onprogress = function(e) {
                 if (e.lengthComputable) {
-                    var percentComplete = (e.loaded / e.total) * 100;
-                    document.getElementById('progress-fill-' + downloadId).style.width = percentComplete + '%';
-                    document.getElementById('progress-text-' + downloadId).textContent = Math.round(percentComplete) + '%';
+                    var percent = Math.round((e.loaded / e.total) * 100);
+                    document.getElementById('progress-fill-' + downloadId).style.width = percent + '%';
+                    document.getElementById('progress-text-' + downloadId).textContent = percent + '%';
                 }
             };
 
             xhr.onload = function() {
                 if (xhr.status === 200) {
                     var blob = xhr.response;
-                    var filename = url.split('/').pop();
-                    
-                    // Create download link
                     var link = document.createElement('a');
                     link.href = URL.createObjectURL(blob);
                     link.download = filename;
                     document.body.appendChild(link);
                     link.click();
                     document.body.removeChild(link);
-                    URL.revokeObjectURL(link.href);
+                    
+                    try {
+                        URL.revokeObjectURL(link.href);
+                    } catch(e) {}
 
-                    // Update UI
                     downloadStates[downloadId] = false;
                     button.classList.remove('downloading');
                     button.classList.add('completed');
@@ -454,7 +405,7 @@
                     progressContainer.style.display = 'none';
                     
                     statusMessage.textContent = 'Downloaded successfully!';
-                    statusMessage.classList.remove('error-msg', 'warning-msg');
+                    statusMessage.classList.remove('error-msg');
                     statusMessage.style.display = 'block';
                 } else {
                     handleDownloadError(downloadId, 'HTTP ' + xhr.status);
@@ -462,11 +413,11 @@
             };
 
             xhr.onerror = function() {
-                handleDownloadError(downloadId, 'Network error. Try again.');
+                handleDownloadError(downloadId, 'Network error');
             };
 
             xhr.ontimeout = function() {
-                handleDownloadError(downloadId, 'Download timeout. Try again.');
+                handleDownloadError(downloadId, 'Timeout');
             };
 
             xhr.send();
@@ -480,7 +431,7 @@
             downloadStates[downloadId] = false;
             button.disabled = false;
             button.classList.remove('downloading');
-            button.textContent = 'Download APK';
+            button.textContent = 'Download';
             progressContainer.style.display = 'none';
             
             statusMessage.textContent = 'Error: ' + errorMsg;
@@ -488,10 +439,10 @@
             statusMessage.style.display = 'block';
         }
 
-        function triggerDownload(url) {
+        function triggerDownload(url, filename) {
             var link = document.createElement('a');
             link.href = url;
-            link.download = url.split('/').pop();
+            link.download = filename;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
@@ -512,14 +463,12 @@
             return div.innerHTML;
         }
 
-        // Load on page load
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', fetchReleases);
         } else {
             fetchReleases();
         }
 
-        // Refresh every 5 minutes
         setInterval(fetchReleases, 5 * 60 * 1000);
     </script>
 </body>
