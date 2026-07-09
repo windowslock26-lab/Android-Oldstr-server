@@ -149,6 +149,53 @@
             font-size: 0.85em;
         }
 
+        .download-section {
+            margin-top: 15px;
+        }
+
+        .progress-container {
+            display: none;
+            margin-bottom: 10px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 5px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .progress-text {
+            font-size: 0.85em;
+            color: #666;
+            text-align: center;
+        }
+
+        .status-message {
+            font-size: 0.9em;
+            color: #28a745;
+            text-align: center;
+            margin-bottom: 10px;
+            display: none;
+        }
+
+        .status-message.error-msg {
+            color: #d9534f;
+        }
+
+        .status-message.warning-msg {
+            color: #f0ad4e;
+        }
+
         .download-btn {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
@@ -169,6 +216,19 @@
 
         .download-btn:active {
             opacity: 0.8;
+        }
+
+        .download-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .download-btn.downloading {
+            background: #f0ad4e;
+        }
+
+        .download-btn.completed {
+            background: #28a745;
         }
 
         .no-apps {
@@ -228,6 +288,7 @@
         var REPO_OWNER = 'windowslock26-lab';
         var REPO_NAME = 'Android-Oldstr-server';
         var API_URL = 'https://api.github.com/repos/' + REPO_OWNER + '/' + REPO_NAME + '/releases';
+        var downloadStates = {};
 
         function fetchReleases() {
             var xhr = new XMLHttpRequest();
@@ -298,6 +359,7 @@
                 var appName = release.name || release.tag_name;
                 var version = release.tag_name;
                 var releaseDate = new Date(release.published_at).toLocaleDateString();
+                var downloadId = 'download-' + i;
 
                 var filesHTML = '';
                 for (var j = 0; j < apkAssets.length; j++) {
@@ -310,6 +372,7 @@
                 }
 
                 var downloadLink = apkAssets[0].browser_download_url;
+                var fileSize = apkAssets[0].size;
 
                 appsHTML += '<div class="app-card">' +
                     '<div class="app-icon">📦</div>' +
@@ -319,11 +382,119 @@
                     '<div class="app-date">Released: ' + releaseDate + '</div>' +
                     '</div>' +
                     '<div class="app-files">' + filesHTML + '</div>' +
-                    '<a href="' + downloadLink + '" class="download-btn">Download APK</a>' +
+                    '<div class="download-section">' +
+                    '<div class="status-message" id="status-' + downloadId + '"></div>' +
+                    '<div class="progress-container" id="progress-container-' + downloadId + '">' +
+                    '<div class="progress-bar">' +
+                    '<div class="progress-fill" id="progress-fill-' + downloadId + '"></div>' +
+                    '</div>' +
+                    '<div class="progress-text" id="progress-text-' + downloadId + '">0%</div>' +
+                    '</div>' +
+                    '<button class="download-btn" id="btn-' + downloadId + '" onclick="startDownload(\'' + downloadLink + '\', \'' + downloadId + '\', ' + fileSize + ')">Download APK</button>' +
+                    '</div>' +
                     '</div>';
             }
 
             content.innerHTML = '<div class="apps-list">' + appsHTML + '</div>';
+        }
+
+        function startDownload(url, downloadId, fileSize) {
+            var button = document.getElementById('btn-' + downloadId);
+            var progressContainer = document.getElementById('progress-container-' + downloadId);
+            var statusMessage = document.getElementById('status-' + downloadId);
+
+            if (button.classList.contains('completed')) {
+                // If already downloaded, trigger re-download
+                triggerDownload(url);
+                return;
+            }
+
+            if (downloadStates[downloadId]) {
+                return; // Already downloading
+            }
+
+            downloadStates[downloadId] = true;
+            button.disabled = true;
+            button.classList.add('downloading');
+            button.textContent = 'Downloading...';
+            progressContainer.style.display = 'block';
+            statusMessage.style.display = 'none';
+
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', url, true);
+            xhr.responseType = 'blob';
+
+            xhr.onprogress = function(e) {
+                if (e.lengthComputable) {
+                    var percentComplete = (e.loaded / e.total) * 100;
+                    document.getElementById('progress-fill-' + downloadId).style.width = percentComplete + '%';
+                    document.getElementById('progress-text-' + downloadId).textContent = Math.round(percentComplete) + '%';
+                }
+            };
+
+            xhr.onload = function() {
+                if (xhr.status === 200) {
+                    var blob = xhr.response;
+                    var filename = url.split('/').pop();
+                    
+                    // Create download link
+                    var link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob);
+                    link.download = filename;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(link.href);
+
+                    // Update UI
+                    downloadStates[downloadId] = false;
+                    button.classList.remove('downloading');
+                    button.classList.add('completed');
+                    button.textContent = 'Downloaded ✓';
+                    progressContainer.style.display = 'none';
+                    
+                    statusMessage.textContent = 'Downloaded successfully!';
+                    statusMessage.classList.remove('error-msg', 'warning-msg');
+                    statusMessage.style.display = 'block';
+                } else {
+                    handleDownloadError(downloadId, 'HTTP ' + xhr.status);
+                }
+            };
+
+            xhr.onerror = function() {
+                handleDownloadError(downloadId, 'Network error. Try again.');
+            };
+
+            xhr.ontimeout = function() {
+                handleDownloadError(downloadId, 'Download timeout. Try again.');
+            };
+
+            xhr.send();
+        }
+
+        function handleDownloadError(downloadId, errorMsg) {
+            var button = document.getElementById('btn-' + downloadId);
+            var progressContainer = document.getElementById('progress-container-' + downloadId);
+            var statusMessage = document.getElementById('status-' + downloadId);
+
+            downloadStates[downloadId] = false;
+            button.disabled = false;
+            button.classList.remove('downloading');
+            button.textContent = 'Download APK';
+            progressContainer.style.display = 'none';
+            
+            statusMessage.textContent = 'Error: ' + errorMsg;
+            statusMessage.classList.add('error-msg');
+            statusMessage.style.display = 'block';
+        }
+
+        function triggerDownload(url) {
+            var link = document.createElement('a');
+            link.href = url;
+            link.download = url.split('/').pop();
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
 
         function showError(message) {
