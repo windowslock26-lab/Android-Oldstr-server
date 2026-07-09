@@ -69,6 +69,24 @@
             word-wrap: break-word;
         }
 
+        .error small {
+            display: block;
+            margin-top: 6px;
+            opacity: 0.85;
+            font-size: 0.85em;
+        }
+
+        .retry-btn {
+            display: inline-block;
+            margin-top: 10px;
+            background: white;
+            color: #d9534f;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+
         .apps-list {
             margin-bottom: 20px;
         }
@@ -95,90 +113,40 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 0px;
+            font-size: 28px;
             flex-shrink: 0;
             margin-right: 12px;
-            background-size: cover;
-            background-position: center;
-            overflow: hidden;
+            color: white;
         }
 
         .app-icon img {
             width: 100%;
             height: 100%;
-            object-fit: cover;
-        }
-
-        .app-icon.fallback {
-            font-size: 32px;
-            display: flex;
+            border-radius: 12px;
         }
 
         .app-info {
-            flex-grow: 1;
+            flex: 1;
+            min-width: 0;
         }
 
         .app-name {
             font-size: 1.1em;
             font-weight: bold;
             color: #333;
-            margin-bottom: 3px;
             word-wrap: break-word;
         }
 
         .app-package {
+            font-size: 0.8em;
             color: #999;
-            font-size: 0.75em;
-            margin-bottom: 3px;
             word-wrap: break-word;
         }
 
         .app-version {
-            color: #666;
             font-size: 0.85em;
-        }
-
-        .download-section {
-            margin-top: 12px;
-        }
-
-        .progress-container {
-            display: none;
-            margin-bottom: 10px;
-        }
-
-        .progress-bar {
-            width: 100%;
-            height: 18px;
-            background: #e0e0e0;
-            border-radius: 4px;
-            overflow: hidden;
-            margin-bottom: 4px;
-        }
-
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-            width: 0%;
-            transition: width 0.2s ease;
-        }
-
-        .progress-text {
-            font-size: 0.8em;
             color: #666;
-            text-align: center;
-        }
-
-        .status-message {
-            font-size: 0.85em;
-            color: #28a745;
-            text-align: center;
-            margin-bottom: 8px;
-            display: none;
-        }
-
-        .status-message.error-msg {
-            color: #d9534f;
+            margin-top: 2px;
         }
 
         .download-btn {
@@ -201,19 +169,6 @@
 
         .download-btn:active {
             opacity: 0.8;
-        }
-
-        .download-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        .download-btn.downloading {
-            background: #f0ad4e;
-        }
-
-        .download-btn.completed {
-            background: #28a745;
         }
 
         .no-apps {
@@ -270,315 +225,132 @@
         </div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <script src="https://unpkg.com/axml@latest/dist/axml.min.js"></script>
-
     <script>
+        // ---------------------------------------------------------------
+        // Android Oldstr Store - simplified for old WebView (KitKat 4.4+)
+        //
+        // Changes vs. the original version:
+        // 1. No JSZip / axml / GitHub API calls. We read the static
+        //    apps-manifest.json that extract-apk-metadata.sh already
+        //    generates on every release. Old WebView JS engines choke on
+        //    ES6 code that some npm bundles ship (arrow functions,
+        //    classes, native Promise-dependent code), so removing those
+        //    dependencies removes that failure mode entirely.
+        // 2. Several manifest URLs are tried in order. If one host's
+        //    TLS certificate isn't trusted by the old Android cert
+        //    store, the next one is tried automatically.
+        // 3. Downloads are plain navigation to the direct APK URL
+        //    (window.location), not Blob + <a download>. The `download`
+        //    attribute and URL.createObjectURL()-based saving are not
+        //    reliably supported on Chromium ~30 (Android 4.4's WebView),
+        //    so this lets Android's own Download Manager handle the file
+        //    instead, which always works.
+        // ---------------------------------------------------------------
+
         var REPO_OWNER = 'windowslock26-lab';
         var REPO_NAME = 'Android-Oldstr-server';
-        var API_URL = 'https://api.github.com/repos/' + REPO_OWNER + '/' + REPO_NAME + '/releases';
-        var downloadStates = {};
+        var BRANCH = 'main';
 
-        function fetchReleases() {
+        // Tried in order, first one that succeeds wins.
+        var MANIFEST_URLS = [
+            'https://raw.githubusercontent.com/' + REPO_OWNER + '/' + REPO_NAME + '/' + BRANCH + '/apps-manifest.json',
+            'https://cdn.jsdelivr.net/gh/' + REPO_OWNER + '/' + REPO_NAME + '@' + BRANCH + '/apps-manifest.json'
+        ];
+
+        function fetchManifest(urlIndex) {
+            if (urlIndex >= MANIFEST_URLS.length) {
+                showError(
+                    'Could not load the app list from any source.',
+                    'This is usually a certificate/TLS problem on old Android versions, ' +
+                    'or no internet connection. Check adb logcat for "SSLHandshakeException" ' +
+                    'or "CertPathValidatorException" for confirmation.'
+                );
+                return;
+            }
+
+            var url = MANIFEST_URLS[urlIndex];
             var xhr = new XMLHttpRequest();
-            xhr.open('GET', API_URL, true);
-            xhr.timeout = 10000;
-            
+
+            try {
+                xhr.open('GET', url, true);
+            } catch (e) {
+                fetchManifest(urlIndex + 1);
+                return;
+            }
+
+            xhr.timeout = 15000;
+
             xhr.onload = function() {
                 if (xhr.status >= 200 && xhr.status < 300) {
                     try {
-                        var releases = JSON.parse(xhr.responseText);
-                        if (releases.length > 0) {
-                            displayApps(releases[0]);
-                            updateLastModified();
-                        } else {
-                            showError('No releases found. Create a release and add APK files.');
-                        }
-                    } catch(e) {
-                        showError('Error parsing data');
+                        var data = JSON.parse(xhr.responseText);
+                        displayApps(data.apps || []);
+                        updateLastModified();
+                    } catch (e) {
+                        // bad JSON from this host, try next
+                        fetchManifest(urlIndex + 1);
                     }
                 } else {
-                    showError('Failed to load: HTTP ' + xhr.status);
+                    fetchManifest(urlIndex + 1);
                 }
             };
 
             xhr.onerror = function() {
-                showError('Network error. Check your connection.');
+                // network / TLS / cert error landed here - try next host
+                fetchManifest(urlIndex + 1);
             };
 
             xhr.ontimeout = function() {
-                showError('Request timeout. Try again.');
+                fetchManifest(urlIndex + 1);
             };
 
-            xhr.send();
-        }
-
-        function displayApps(release) {
-            var content = document.getElementById('content');
-            var apkAssets = [];
-
-            for (var i = 0; i < release.assets.length; i++) {
-                var asset = release.assets[i];
-                if (asset.name.toLowerCase().indexOf('.apk') !== -1) {
-                    apkAssets.push(asset);
-                }
-            }
-
-            if (apkAssets.length === 0) {
-                content.innerHTML = '<div class="no-apps">No APK files in this release.<br>Add APK files to the latest release.</div>';
-                return;
-            }
-
-            content.innerHTML = '<div class="loading">Processing APK files...</div>';
-
-            var appsHTML = '';
-            var processed = 0;
-
-            for (var i = 0; i < apkAssets.length; i++) {
-                (function(index, asset) {
-                    extractAPKInfo(asset, function(info) {
-                        processed++;
-                        var downloadId = 'download-' + index;
-                        var sizeInMB = (asset.size / (1024 * 1024)).toFixed(2);
-                        var downloadLink = asset.browser_download_url;
-
-                        var iconHTML = '';
-                        if (info.icon) {
-                            iconHTML = '<img src="' + info.icon + '" alt="icon">';
-                        } else {
-                            iconHTML = '<div class="fallback">📦</div>';
-                        }
-
-                        appsHTML += '<div class="app-card">' +
-                            '<div class="app-header">' +
-                            '<div class="app-icon">' + iconHTML + '</div>' +
-                            '<div class="app-info">' +
-                            '<div class="app-name">' + escapeHtml(info.name || 'Unknown App') + '</div>' +
-                            '<div class="app-package">' + escapeHtml(info.packageName || 'com.unknown') + '</div>' +
-                            '<div class="app-version">v' + escapeHtml(info.version || '1.0') + ' • ' + sizeInMB + ' MB</div>' +
-                            '</div>' +
-                            '</div>' +
-                            '<div class="download-section">' +
-                            '<div class="status-message" id="status-' + downloadId + '"></div>' +
-                            '<div class="progress-container" id="progress-container-' + downloadId + '">' +
-                            '<div class="progress-bar">' +
-                            '<div class="progress-fill" id="progress-fill-' + downloadId + '"></div>' +
-                            '</div>' +
-                            '<div class="progress-text" id="progress-text-' + downloadId + '">0%</div>' +
-                            '</div>' +
-                            '<button class="download-btn" id="btn-' + downloadId + '" onclick="startDownload(\'' + downloadLink + '\', \'' + downloadId + '\', \'' + asset.name + '\')">Download</button>' +
-                            '</div>' +
-                            '</div>';
-
-                        if (processed === apkAssets.length) {
-                            content.innerHTML = '<div class="apps-list">' + appsHTML + '</div>';
-                        }
-                    });
-                })(i, apkAssets[i]);
-            }
-        }
-
-        function extractAPKInfo(asset, callback) {
-            var xhr = new XMLHttpRequest();
-            xhr.open('GET', asset.browser_download_url, true);
-            xhr.responseType = 'arraybuffer';
-            xhr.timeout = 30000;
-
-            xhr.onload = function() {
-                if (xhr.status === 200) {
-                    try {
-                        JSZip.loadAsync(xhr.response).then(function(zip) {
-                            var manifest = zip.file('AndroidManifest.xml');
-                            if (!manifest) {
-                                callback({ name: asset.name, packageName: '', version: '', icon: null });
-                                return;
-                            }
-
-                            manifest.async('arraybuffer').then(function(data) {
-                                try {
-                                    var parser = new window.AXMLParser(new Uint8Array(data));
-                                    var manifest_obj = parser.parse();
-                                    
-                                    var appName = manifest_obj.application.label || asset.name;
-                                    var packageName = manifest_obj.manifest.package || '';
-                                    var version = manifest_obj.manifest.versionName || '1.0';
-                                    
-                                    extractIcon(zip, manifest_obj, function(iconData) {
-                                        callback({
-                                            name: appName,
-                                            packageName: packageName,
-                                            version: version,
-                                            icon: iconData
-                                        });
-                                    });
-                                } catch(e) {
-                                    callback({ name: asset.name, packageName: '', version: '', icon: null });
-                                }
-                            });
-                        });
-                    } catch(e) {
-                        callback({ name: asset.name, packageName: '', version: '', icon: null });
-                    }
-                } else {
-                    callback({ name: asset.name, packageName: '', version: '', icon: null });
-                }
-            };
-
-            xhr.onerror = function() {
-                callback({ name: asset.name, packageName: '', version: '', icon: null });
-            };
-
-            xhr.ontimeout = function() {
-                callback({ name: asset.name, packageName: '', version: '', icon: null });
-            };
-
-            xhr.send();
-        }
-
-        function extractIcon(zip, manifest, callback) {
             try {
-                var iconPath = null;
-                var possiblePaths = [
-                    'res/mipmap-xxxhdpi/ic_launcher.png',
-                    'res/mipmap-xxhdpi/ic_launcher.png',
-                    'res/mipmap-xhdpi/ic_launcher.png',
-                    'res/mipmap-hdpi/ic_launcher.png',
-                    'res/mipmap-mdpi/ic_launcher.png',
-                    'res/drawable-xxxhdpi/ic_launcher.png',
-                    'res/drawable-xxhdpi/ic_launcher.png',
-                    'res/drawable-xhdpi/ic_launcher.png',
-                    'res/drawable-hdpi/ic_launcher.png',
-                    'res/drawable-mdpi/ic_launcher.png',
-                    'res/drawable/ic_launcher.png'
-                ];
-
-                var checkPath = function(index) {
-                    if (index >= possiblePaths.length) {
-                        callback(null);
-                        return;
-                    }
-
-                    var path = possiblePaths[index];
-                    var file = zip.file(path);
-                    
-                    if (file) {
-                        file.async('blob').then(function(blob) {
-                            var reader = new FileReader();
-                            reader.onload = function(e) {
-                                callback(e.target.result);
-                            };
-                            reader.readAsDataURL(blob);
-                        });
-                    } else {
-                        checkPath(index + 1);
-                    }
-                };
-
-                checkPath(0);
-            } catch(e) {
-                callback(null);
+                xhr.send();
+            } catch (e) {
+                fetchManifest(urlIndex + 1);
             }
         }
 
-        function startDownload(url, downloadId, filename) {
-            var button = document.getElementById('btn-' + downloadId);
-            var progressContainer = document.getElementById('progress-container-' + downloadId);
-            var statusMessage = document.getElementById('status-' + downloadId);
+        function displayApps(apps) {
+            var content = document.getElementById('content');
 
-            if (button.classList.contains('completed')) {
-                triggerDownload(url, filename);
+            if (!apps || apps.length === 0) {
+                content.innerHTML = '<div class="no-apps">No apps found.<br>Add APKs to a GitHub release.</div>';
                 return;
             }
 
-            if (downloadStates[downloadId]) {
-                return;
+            var html = '<div class="apps-list">';
+
+            for (var i = 0; i < apps.length; i++) {
+                var app = apps[i];
+                var iconHTML = app.icon
+                    ? '<img src="' + escapeAttr(app.icon) + '" alt="icon">'
+                    : '\uD83D\uDCE6';
+
+                html += '<div class="app-card">' +
+                    '<div class="app-header">' +
+                        '<div class="app-icon">' + iconHTML + '</div>' +
+                        '<div class="app-info">' +
+                            '<div class="app-name">' + escapeHtml(app.name || 'Unknown App') + '</div>' +
+                            '<div class="app-package">' + escapeHtml(app.package || '') + '</div>' +
+                            '<div class="app-version">v' + escapeHtml(app.version || '1.0') + ' \u2022 ' + escapeHtml(String(app.size || '?')) + ' MB</div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<a class="download-btn" href="' + escapeAttr(app.downloadUrl) + '">Download</a>' +
+                '</div>';
             }
 
-            downloadStates[downloadId] = true;
-            button.disabled = true;
-            button.classList.add('downloading');
-            button.textContent = 'Downloading...';
-            progressContainer.style.display = 'block';
-            statusMessage.style.display = 'none';
-
-            var xhr = new XMLHttpRequest();
-            xhr.open('GET', url, true);
-            xhr.responseType = 'blob';
-
-            xhr.onprogress = function(e) {
-                if (e.lengthComputable) {
-                    var percent = Math.round((e.loaded / e.total) * 100);
-                    document.getElementById('progress-fill-' + downloadId).style.width = percent + '%';
-                    document.getElementById('progress-text-' + downloadId).textContent = percent + '%';
-                }
-            };
-
-            xhr.onload = function() {
-                if (xhr.status === 200) {
-                    var blob = xhr.response;
-                    var link = document.createElement('a');
-                    link.href = URL.createObjectURL(blob);
-                    link.download = filename;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    
-                    try {
-                        URL.revokeObjectURL(link.href);
-                    } catch(e) {}
-
-                    downloadStates[downloadId] = false;
-                    button.classList.remove('downloading');
-                    button.classList.add('completed');
-                    button.textContent = 'Downloaded ✓';
-                    progressContainer.style.display = 'none';
-                    
-                    statusMessage.textContent = 'Downloaded successfully!';
-                    statusMessage.classList.remove('error-msg');
-                    statusMessage.style.display = 'block';
-                } else {
-                    handleDownloadError(downloadId, 'HTTP ' + xhr.status);
-                }
-            };
-
-            xhr.onerror = function() {
-                handleDownloadError(downloadId, 'Network error');
-            };
-
-            xhr.ontimeout = function() {
-                handleDownloadError(downloadId, 'Timeout');
-            };
-
-            xhr.send();
+            html += '</div>';
+            content.innerHTML = html;
         }
 
-        function handleDownloadError(downloadId, errorMsg) {
-            var button = document.getElementById('btn-' + downloadId);
-            var progressContainer = document.getElementById('progress-container-' + downloadId);
-            var statusMessage = document.getElementById('status-' + downloadId);
-
-            downloadStates[downloadId] = false;
-            button.disabled = false;
-            button.classList.remove('downloading');
-            button.textContent = 'Download';
-            progressContainer.style.display = 'none';
-            
-            statusMessage.textContent = 'Error: ' + errorMsg;
-            statusMessage.classList.add('error-msg');
-            statusMessage.style.display = 'block';
-        }
-
-        function triggerDownload(url, filename) {
-            var link = document.createElement('a');
-            link.href = url;
-            link.download = filename;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
-
-        function showError(message) {
-            document.getElementById('content').innerHTML = '<div class="error">' + escapeHtml(message) + '</div>';
+        function showError(message, detail) {
+            var html = '<div class="error">' + escapeHtml(message);
+            if (detail) {
+                html += '<small>' + escapeHtml(detail) + '</small>';
+            }
+            html += '<br><a class="retry-btn" href="javascript:location.reload();">Retry</a></div>';
+            document.getElementById('content').innerHTML = html;
         }
 
         function updateLastModified() {
@@ -588,17 +360,23 @@
 
         function escapeHtml(text) {
             var div = document.createElement('div');
-            div.textContent = text;
+            div.appendChild(document.createTextNode(String(text)));
             return div.innerHTML;
         }
 
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', fetchReleases);
-        } else {
-            fetchReleases();
+        function escapeAttr(text) {
+            return String(text || '')
+                .replace(/&/g, '&amp;')
+                .replace(/"/g, '&quot;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
         }
 
-        setInterval(fetchReleases, 5 * 60 * 1000);
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', function() { fetchManifest(0); });
+        } else {
+            fetchManifest(0);
+        }
     </script>
 </body>
 </html>
